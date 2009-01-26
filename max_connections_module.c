@@ -216,11 +216,11 @@ queue_push (max_connections_srv_conf_t *maxconn_cf, max_connections_peer_data_t 
   assert(maxconn_cf->max_queue_length >=  maxconn_cf->queue_length);
 
   ngx_log_error( NGX_LOG_INFO
-                , peer_data->r->connection->log
-                , 0
-                , "max_connections add queue (new size %ui)"
-                , queue_size(maxconn_cf)
-                );
+               , peer_data->r->connection->log
+               , 0
+               , "max_connections add queue (new size %ui)"
+               , queue_size(maxconn_cf)
+               );
   return NGX_OK;
 }
 
@@ -304,17 +304,14 @@ dispatch (max_connections_srv_conf_t *maxconn_cf)
   assert(peer_data->backend == NULL);
 
   ngx_log_error( NGX_LOG_INFO
-                , r->connection->log
-                , 0
-                , "max_connections dispatch (max_queue_length: %ui, queue timeout: %ui, maxconn: %ui)"
-                , maxconn_cf->max_queue_length
-                , maxconn_cf->queue_timeout
-                , maxconn_cf->max_connections
-                );
+               , r->connection->log
+               , 0
+               , "max_connections dispatch (max_queue_length: %ui, queue timeout: %ui, maxconn: %ui)"
+               , maxconn_cf->max_queue_length
+               , maxconn_cf->queue_timeout
+               , maxconn_cf->max_connections
+               );
   ngx_http_upstream_connect(r, r->upstream);
-
-  /* can we dispatch again? */
-  dispatch(maxconn_cf);
 }
 
 static void
@@ -345,10 +342,10 @@ queue_check_event(ngx_event_t *ev)
     max_connections_peer_data_t *peer_data = queue_shift(maxconn_cf);
     assert(peer_data == oldest);
     ngx_log_error( NGX_LOG_INFO
-                  , peer_data->r->connection->log
-                  , 0
-                  , "max_connections expire"
-                  );
+                 , peer_data->r->connection->log
+                 , 0
+                 , "max_connections expire"
+                 );
     ngx_http_finalize_request(peer_data->r, NGX_HTTP_QUEUE_EXPIRATION);
   }
 
@@ -407,12 +404,12 @@ peer_free (ngx_peer_connection_t *pc, void *data, ngx_uint_t state)
     assert(backend->connections > 0);
     backend->connections--; /* free the slot */
     ngx_log_error( NGX_LOG_INFO
-                  , peer_data->r->connection->log
-                  , 0
-                  , "max_connections recv client from %V (now %ui connections)"
-                  , backend->name
-                  , backend->connections
-                  );
+                 , peer_data->r->connection->log
+                 , 0
+                 , "max_connections recv client from %V (now %ui connections)"
+                 , backend->name
+                 , backend->connections
+                 );
   }
 
   /* previous connection failed (state & NGX_PEER_FAILED) or either the
@@ -421,11 +418,11 @@ peer_free (ngx_peer_connection_t *pc, void *data, ngx_uint_t state)
    */ 
   if(state & NGX_PEER_FAILED) {
     ngx_log_error( NGX_LOG_INFO
-                  , pc->log
-                  , 0
-                  , "max_connections %V failed "
-                  , backend->name
-                  );
+                 , pc->log
+                 , 0
+                 , "max_connections %V failed "
+                 , backend->name
+                 );
     peer_data->backend->accessed = ngx_time();
     peer_data->backend->fails++;
     peer_data->backend = NULL;
@@ -436,10 +433,10 @@ peer_free (ngx_peer_connection_t *pc, void *data, ngx_uint_t state)
     if(upstreams_are_all_dead(maxconn_cf)) {
       pc->tries = 0; /* kill this request */
       ngx_log_error( NGX_LOG_INFO
-                    , pc->log
-                    , 0
-                    , "max_connections all backends are dead. killing request."
-                    );
+                   , pc->log
+                   , 0
+                   , "max_connections all backends are dead. killing request."
+                   );
     }
 
     return;
@@ -479,12 +476,12 @@ peer_get (ngx_peer_connection_t *pc, void *data)
   pc->name     = backend->name;
 
   ngx_log_error( NGX_LOG_INFO
-                , pc->log
-                , 0
-                , "max_connections sending client to %V (now %ui connections)"
-                , pc->name
-                , backend->connections
-                );
+               , pc->log
+               , 0
+               , "max_connections sending client to %V (now %ui connections)"
+               , pc->name
+               , backend->connections
+               );
   return NGX_OK;
 }
 
@@ -521,10 +518,10 @@ static ngx_int_t
 max_connections_init(ngx_conf_t *cf, ngx_http_upstream_srv_conf_t *uscf)
 {
   ngx_log_error( NGX_LOG_INFO
-                , cf->log
-                , 0
-                , "max_connections_init"
-                );
+               , cf->log
+               , 0
+               , "max_connections_init"
+               );
 
   max_connections_srv_conf_t *maxconn_cf = 
     ngx_http_conf_upstream_srv_conf(uscf, max_connections_module);
