@@ -1,4 +1,4 @@
-NGINX_DIR = "../nginx-0.6.34" # change me
+NGINX_DIR = "../nginx-0.6.35" # change me
 THIS_DIR  = $(shell pwd)
 
 default: compile
