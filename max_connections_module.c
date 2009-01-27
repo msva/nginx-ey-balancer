@@ -10,9 +10,6 @@
 #include <ngx_http_upstream.h>
 #include <assert.h>
 
-/* 0.5 seconds until a backend SLOT is reset after client half-close */
-#define CLIENT_CLOSURE_SLEEP ((ngx_msec_t)500)  
-
 typedef struct {
   ngx_uint_t max_connections;
   ngx_uint_t max_queue_length;
@@ -36,9 +33,7 @@ typedef struct {
   ngx_uint_t down:1;
 
   ngx_uint_t fails;
-  ngx_uint_t client_closures;
   ngx_uint_t connections;
-  ngx_event_t disconnect_event;
   max_connections_srv_conf_t *maxconn_cf;
 } max_connections_backend_t;
 
@@ -312,20 +307,9 @@ dispatch (max_connections_srv_conf_t *maxconn_cf)
                , maxconn_cf->max_connections
                );
   ngx_http_upstream_connect(r, r->upstream);
-}
 
-static void
-recover_from_client_closure(ngx_event_t *ev)
-{
-  max_connections_backend_t *backend = ev->data;
-
-  assert(backend->connections > 0);
-  assert(backend->client_closures > 0);
-
-  backend->connections -= backend->client_closures; 
-  backend->client_closures = 0;
-
-  dispatch(backend->maxconn_cf);
+  /* can we dispatch again? */
+  dispatch(maxconn_cf);
 }
 
 static void
@@ -379,22 +363,8 @@ peer_free (ngx_peer_connection_t *pc, void *data, ngx_uint_t state)
 
     /* If the connection is in the queue, remove it. */
     queue_remove(peer_data);
-    
-    /* If the connection is connected to a backend */
-    if(backend != NULL) {
-      if(!backend->disconnect_event.timer_set) {
-        assert(backend->client_closures == 0);
-        ngx_add_timer( (&backend->disconnect_event)
-                     , CLIENT_CLOSURE_SLEEP
-                     );
-      }
-      backend->client_closures++;
-      assert(backend->client_closures <= maxconn_cf->max_connections);
-      peer_data->backend = NULL;
-    }
 
     pc->tries = 0;
-    goto dispatch;
   }
 
   if(pc) 
@@ -450,7 +420,7 @@ peer_free (ngx_peer_connection_t *pc, void *data, ngx_uint_t state)
 
   peer_data->backend = NULL;
 
-dispatch:
+//dispatch:
   dispatch(maxconn_cf);
 }
 
@@ -554,9 +524,6 @@ max_connections_init(ngx_conf_t *cf, ngx_http_upstream_srv_conf_t *uscf)
       backend->weight       = server[i].down ? 0 : server[i].weight;
       backend->connections  = 0;
 
-      backend->disconnect_event.handler = recover_from_client_closure;
-      backend->disconnect_event.log = cf->log;
-      backend->disconnect_event.data = backend;
       backend->maxconn_cf = maxconn_cf;
     }
   }
