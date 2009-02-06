@@ -1,14 +1,3 @@
-diff -Naur ../nginx-0.6.34/src/http/ngx_http_request.h src/http/ngx_http_request.h
---- ../nginx-0.6.34/src/http/ngx_http_request.h	2008-11-27 15:22:34.000000000 +0100
-+++ src/http/ngx_http_request.h	2009-01-22 12:50:27.000000000 +0100
-@@ -119,6 +119,7 @@
- #define NGX_HTTP_GATEWAY_TIME_OUT          504
- #define NGX_HTTP_INSUFFICIENT_STORAGE      507
- 
-+#define NGX_HTTP_QUEUE_EXPIRATION          555
- 
- #define NGX_HTTP_LOWLEVEL_BUFFERED         0xf0
- #define NGX_HTTP_WRITE_BUFFERED            0x10
 diff -Naur ../nginx-0.6.34/src/http/ngx_http_upstream.c src/http/ngx_http_upstream.c
 --- ../nginx-0.6.34/src/http/ngx_http_upstream.c	2008-11-27 15:31:44.000000000 +0100
 +++ src/http/ngx_http_upstream.c	2009-01-22 12:50:37.000000000 +0100
