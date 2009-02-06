@@ -329,7 +329,9 @@ queue_check_event(ngx_event_t *ev)
                  , 0
                  , "max_connections expire"
                  );
-    ngx_http_finalize_request(peer_data->r, NGX_HTTP_QUEUE_EXPIRATION);
+    /* use NGX_HTTP_QUEUE_EXPIRATION? seems to be causing memory problems
+     * test with test/test_queue_timeout.rb */
+    ngx_http_finalize_request(peer_data->r, NGX_HTTP_INTERNAL_SERVER_ERROR);
   }
 
   /* try to dispatch some requets */
