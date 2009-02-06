@@ -154,7 +154,7 @@ queue_remove (max_connections_peer_data_t *peer_data)
                 , peer_data->r->connection->log
                 , 0
                 , "max_connections del queue (new size %ui)"
-                , queue_size(peer_data->maxconn_cf)
+                , maxconn_cf->queue_length
                 );
 
   if(ngx_queue_empty(&maxconn_cf->waiting_requests)) {
@@ -214,7 +214,7 @@ queue_push (max_connections_srv_conf_t *maxconn_cf, max_connections_peer_data_t 
                , peer_data->r->connection->log
                , 0
                , "max_connections add queue (new size %ui)"
-               , queue_size(maxconn_cf)
+               , maxconn_cf->queue_length
                );
   return NGX_OK;
 }
@@ -316,7 +316,6 @@ static void
 queue_check_event(ngx_event_t *ev)
 {
   max_connections_srv_conf_t *maxconn_cf = ev->data;
-
   max_connections_peer_data_t *oldest; 
 
   while ( (oldest = queue_oldest(maxconn_cf))
