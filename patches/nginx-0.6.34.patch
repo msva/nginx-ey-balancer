@@ -53,10 +53,11 @@ diff -Naur ../nginx-0.6.34/src/http/ngx_http_upstream.c src/http/ngx_http_upstre
 diff -Naur ../nginx-0.6.34/src/http/ngx_http_upstream.h src/http/ngx_http_upstream.h
 --- ../nginx-0.6.34/src/http/ngx_http_upstream.h	2008-03-03 21:04:06.000000000 +0100
 +++ src/http/ngx_http_upstream.h	2009-01-22 12:50:55.000000000 +0100
-@@ -270,6 +270,7 @@
+@@ -270,6 +270,8 @@
      ngx_http_variable_value_t *v, uintptr_t data);
  
  void ngx_http_upstream_init(ngx_http_request_t *r);
++#define NGX_HTTP_UPSTREAM_INIT_BUSY_PATCH_VERSION  1
 +void ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t *u);
  ngx_http_upstream_srv_conf_t *ngx_http_upstream_add(ngx_conf_t *cf,
      ngx_url_t *u, ngx_uint_t flags);
