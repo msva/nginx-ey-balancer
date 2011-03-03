@@ -253,7 +253,7 @@ finalize_request(ngx_http_request_t *r, ngx_int_t rc)
 
     peer_data->original_finalize_request(r, rc);
     
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
             "finalize http max connections request: %d", cf->connections);
     
     cf->connections --;
