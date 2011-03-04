@@ -25,10 +25,13 @@ typedef struct {
 } max_connections_srv_conf_t;
 
 typedef struct {
-  max_connections_srv_conf_t *maxconn_cf;
   ngx_queue_t queue; /* queue information */
+
+  max_connections_srv_conf_t *maxconn_cf;
   ngx_http_request_t *r; /* the request associated with the peer */
+
   ngx_msec_t accessed;
+  ngx_uint_t processing:1;
 
   void *data;
   ngx_event_get_peer_pt     original_get_peer;
@@ -146,7 +149,6 @@ queue_remove (max_connections_peer_data_t *peer_data)
                 , "max_connections del queue (new size %ui)"
                 , maxconn_cf->queue_length
                 );
-
   if(ngx_queue_empty(&maxconn_cf->waiting_requests)) {
     /* delete the timer if the queue is empty now */
     if(maxconn_cf->queue_check_event.timer_set) {
@@ -174,10 +176,10 @@ queue_shift (max_connections_srv_conf_t *maxconn_cf)
 {
   if(ngx_queue_empty(&maxconn_cf->waiting_requests)) 
     return NULL;
+  
   max_connections_peer_data_t *peer_data = queue_oldest (maxconn_cf);
 
-  ngx_int_t r = queue_remove (peer_data);
-  assert(r == 1);
+  queue_remove (peer_data);
 
   return peer_data;
 }
@@ -188,27 +190,20 @@ queue_push (max_connections_srv_conf_t *maxconn_cf, max_connections_peer_data_t 
 {
   if(maxconn_cf->queue_length >= maxconn_cf->max_queue_length)
     return NGX_ERROR;
-
+  
   /* if this is the first element ensure we set the queue_check_event */
   if(ngx_queue_empty(&maxconn_cf->waiting_requests)) {
-    assert(!maxconn_cf->queue_check_event.timer_set);
     ngx_add_timer((&maxconn_cf->queue_check_event), maxconn_cf->queue_timeout); 
   }
   ngx_queue_insert_head(&maxconn_cf->waiting_requests, &peer_data->queue);
 
   maxconn_cf->queue_length += 1;
-  assert(maxconn_cf->queue_length == queue_size(peer_data->maxconn_cf));
-  assert(maxconn_cf->max_queue_length >=  maxconn_cf->queue_length);
 
-  ngx_log_error( NGX_LOG_INFO
-               , peer_data->r->connection->log
-               , 0
-               , "max_connections add queue (new size %ui)"
-               , maxconn_cf->queue_length
-               );
+  ngx_log_debug1(NGX_LOG_DEBUG_HTTP, peer_data->r->connection->log, 0,
+               "max_connections add queue (new size %ui)", maxconn_cf->queue_length);
+  
   return NGX_OK;
 }
-
 
 /* This function takes the oldest request on the queue
  * (maxconn_cf->waiting_requests) and dispatches it to the backends.  This
@@ -220,8 +215,8 @@ queue_push (max_connections_srv_conf_t *maxconn_cf, max_connections_peer_data_t 
 static void
 dispatch (max_connections_srv_conf_t *maxconn_cf)
 {
-  if(ngx_queue_empty(&maxconn_cf->waiting_requests)) return;
-  if(maxconn_cf->connections >= maxconn_cf->max_connections) return;
+  if (ngx_queue_empty(&maxconn_cf->waiting_requests)) return;
+  if (maxconn_cf->connections >= maxconn_cf->max_connections) return;
 
   max_connections_peer_data_t *peer_data = queue_shift(maxconn_cf);
   ngx_http_request_t *r = peer_data->r;
@@ -230,20 +225,14 @@ dispatch (max_connections_srv_conf_t *maxconn_cf)
                "max_connections dispatch (queue_length: %ui, conn: %ui)",
                maxconn_cf->queue_length, maxconn_cf->connections);
   
+  peer_data->processing = 1;
   maxconn_cf->connections++; /* keep track of how many slots are occupied */
 
-  /* hook */
-  r->upstream->finalize_request = finalize_request;
-  
   ngx_http_upstream_connect(r, r->upstream);
-  
-  /* can we dispatch again? */
-  dispatch(maxconn_cf);
 }
 
-
 /*
- * finalize_request() been called after peer_free(), should not call dispatch()
+ * finalize_request() been called before peer_free(), should not call dispatch()
  */
 static void
 finalize_request(ngx_http_request_t *r, ngx_int_t rc)
@@ -256,7 +245,12 @@ finalize_request(ngx_http_request_t *r, ngx_int_t rc)
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
             "finalize http max connections request: %d", cf->connections);
     
-    cf->connections --;
+    if (peer_data->processing) {
+        cf->connections --;
+        peer_data->processing = 0;
+    }else {
+        queue_remove(peer_data);
+    }
 }
 
 static void
@@ -270,17 +264,10 @@ queue_check_event(ngx_event_t *ev)
         ) 
   {
     max_connections_peer_data_t *peer_data = queue_shift(maxconn_cf);
-    assert(peer_data == oldest);
-    ngx_log_error( NGX_LOG_INFO
-                 , peer_data->r->connection->log
-                 , 0
-                 , "max_connections expire"
-                 );
-    ngx_http_finalize_request(peer_data->r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+    ngx_log_error(NGX_LOG_INFO, peer_data->r->connection->log, 0,
+                 "max_connections expire");
+    ngx_http_finalize_request(peer_data->r, NGX_HTTP_GATEWAY_TIME_OUT);
   }
-
-  /* try to dispatch some requets */
-  dispatch(maxconn_cf);
 
   /* check the check timer */
   if( !ngx_queue_empty(&maxconn_cf->waiting_requests) 
@@ -321,7 +308,7 @@ peer_init (ngx_http_request_t *r, ngx_http_upstream_srv_conf_t *uscf)
   ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
             "http max connections peer init");
 
-  if(maxconn_cf->original_init_peer(r, uscf) != NGX_OK) {
+  if (maxconn_cf->original_init_peer(r, uscf) != NGX_OK) {
     return NGX_ERROR;
   }
 
@@ -332,20 +319,34 @@ peer_init (ngx_http_request_t *r, ngx_http_upstream_srv_conf_t *uscf)
   peer_data->maxconn_cf = maxconn_cf;
   peer_data->r = r;
   peer_data->accessed = ngx_current_msec; 
+  peer_data->processing = 0;
   
   peer_data->original_finalize_request = r->upstream->finalize_request;
   peer_data->original_get_peer = r->upstream->peer.get;
   peer_data->original_free_peer = r->upstream->peer.free;
   peer_data->data = r->upstream->peer.data;
 
-  r->upstream->peer.free  = peer_free;
+  r->upstream->finalize_request = finalize_request;
   r->upstream->peer.get   = peer_get;
+  r->upstream->peer.free  = peer_free;
   r->upstream->peer.data  = peer_data;
 
-  if(queue_push(maxconn_cf, peer_data) == NGX_ERROR)
-    return NGX_ERROR;
+  if (maxconn_cf->connections < maxconn_cf->max_connections) {
+      peer_data->processing = 1;
+      maxconn_cf->connections ++; /* keep track of how many slots are occupied */
+      return NGX_OK;
+  }
 
-  dispatch(peer_data->maxconn_cf);
+  if (queue_push(maxconn_cf, peer_data) == NGX_ERROR) {
+      ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+               "max connections queue push failed (queue_length: %ui, conn: %ui)",
+               maxconn_cf->queue_length, maxconn_cf->connections);
+      return NGX_ERROR;
+  }
+  
+  ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+               "max connections put in queue (queue_length: %ui, conn: %ui)",
+               maxconn_cf->queue_length, maxconn_cf->connections);
 
   return NGX_BUSY;
 }
@@ -353,11 +354,8 @@ peer_init (ngx_http_request_t *r, ngx_http_upstream_srv_conf_t *uscf)
 static ngx_int_t
 max_connections_init(ngx_conf_t *cf, ngx_http_upstream_srv_conf_t *uscf)
 {
-  ngx_log_error( NGX_LOG_INFO
-               , cf->log
-               , 0
-               , "max_connections_init"
-               );
+  ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+               "max connections init");
 
   max_connections_srv_conf_t *maxconn_cf = 
     ngx_http_conf_upstream_srv_conf(uscf, max_connections_module);
@@ -372,13 +370,13 @@ max_connections_init(ngx_conf_t *cf, ngx_http_upstream_srv_conf_t *uscf)
 
   maxconn_cf->connections = 0;
   maxconn_cf->queue_length = 0;
+  
   ngx_queue_init(&maxconn_cf->waiting_requests);
-  assert(ngx_queue_empty(&maxconn_cf->waiting_requests));
 
   maxconn_cf->queue_check_event.handler = queue_check_event;
   maxconn_cf->queue_check_event.log = cf->log;
   maxconn_cf->queue_check_event.data = maxconn_cf;
-
+  
   return NGX_OK;
 }
 
@@ -449,6 +447,7 @@ max_connections_command (ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
                                   : ngx_http_upstream_init_round_robin;
   uscf->peer.init_upstream = max_connections_init;
 
+  /* 2. set the number of max_connections */
   ngx_str_t *value = cf->args->elts;
   ngx_int_t max_connections = ngx_atoi(value[1].data, value[1].len);
 
@@ -463,7 +462,6 @@ max_connections_command (ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     return NGX_CONF_ERROR;
   }
 
-  /* 2. set the number of max_connections */
   maxconn_cf->max_connections = (ngx_uint_t)max_connections;
 
   return NGX_CONF_OK;
