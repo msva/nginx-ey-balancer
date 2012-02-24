@@ -563,10 +563,6 @@ max_connections_queue_timeout_command (ngx_conf_t *cf, ngx_command_t *cmd, void 
       return "invalid value";
   }
 
-  if (ms == (ngx_msec_t) NGX_PARSE_LARGE_TIME) {
-      return "value must be less than 597 hours";
-  }
-
   maxconn_cf->queue_timeout = ms;
 
   return NGX_CONF_OK;

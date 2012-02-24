@@ -1,3 +1,5 @@
+This is a fork of ey balancer due to unmaintainity of original repo.
+
 haproxy maxconn for nginx
 Adds a request queue to Nginx that allows the limiting of concurrent requests
 passed to the upstream.  "max_connections N;" in an upstream directive means
