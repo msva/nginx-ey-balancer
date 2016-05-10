@@ -47,6 +47,8 @@ static char * max_connections_max_queue_length_command (ngx_conf_t *cf, ngx_comm
 static void * max_connections_create_conf(ngx_conf_t *cf);
 static void finalize_request(ngx_http_request_t *r, ngx_int_t rc);
 
+extern void ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t *u);
+
 #define RAMP(x) (x > 0 ? x : 0)
 
 static ngx_command_t  max_connections_commands[] =
